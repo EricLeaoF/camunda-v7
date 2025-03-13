@@ -10,6 +10,7 @@ import com.google.cloud.vision.v1.Feature;
 import com.google.cloud.vision.v1.Feature.Type;
 import com.google.cloud.vision.v1.Image;
 import com.google.cloud.vision.v1.ImageAnnotatorClient;
+import com.google.cloud.vision.v1.TextAnnotation;
 import com.google.protobuf.ByteString;
 
 import java.io.ByteArrayInputStream;
@@ -21,43 +22,75 @@ public class ExtractData implements JavaDelegate {
 
     @Override
     public void execute(DelegateExecution execution) throws Exception {
-        
-        // Recebe o ByteArrayInputStream da variável 'file' no DelegateExecution
+
         ByteArrayInputStream byteArrayInputStream = (ByteArrayInputStream) execution.getVariable("file");
         System.out.println("Arquivo recebido (ByteArrayInputStream): " + byteArrayInputStream);
 
-        // Converte o conteúdo do ByteArrayInputStream em um array de bytes
         byte[] decodedBytes = byteArrayInputStream.readAllBytes();
         ByteString imgBytes = ByteString.copyFrom(decodedBytes);
 
-        // Inicializa o cliente da Google Vision API
         try (ImageAnnotatorClient vision = ImageAnnotatorClient.create()) {
 
-            // Cria o pedido de anotação de imagem
             List<AnnotateImageRequest> requests = new ArrayList<>();
             Image img = Image.newBuilder().setContent(imgBytes).build();
-            Feature feat = Feature.newBuilder().setType(Type.LABEL_DETECTION).build();
-            AnnotateImageRequest request =
-                AnnotateImageRequest.newBuilder().addFeatures(feat).setImage(img).build();
-            requests.add(request);
 
-            // Realiza a detecção de rótulos na imagem
+            // Request for Label Detection
+            Feature labelDetection = Feature.newBuilder().setType(Type.LABEL_DETECTION).build();
+            AnnotateImageRequest labelRequest = AnnotateImageRequest.newBuilder()
+                    .addFeatures(labelDetection)
+                    .setImage(img)
+                    .build();
+            requests.add(labelRequest);
+
+            // Request for Text Detection
+            Feature textDetection = Feature.newBuilder().setType(Type.TEXT_DETECTION).build();
+            AnnotateImageRequest textRequest = AnnotateImageRequest.newBuilder()
+                    .addFeatures(textDetection)
+                    .setImage(img)
+                    .build();
+            requests.add(textRequest);
+
+            // Send batch request
             BatchAnnotateImagesResponse response = vision.batchAnnotateImages(requests);
-            List<AnnotateImageResponse> responses = response.getResponsesList();
+            AnnotateImageResponse labelResult = response.getResponsesList().get(0); // Label detection result
+            AnnotateImageResponse textResult = response.getResponsesList().get(1);  // Text detection result
 
-            // Processa a resposta da API
-            for (AnnotateImageResponse res : responses) {
-                if (res.hasError()) {
-                    System.out.format("Erro: %s%n", res.getError().getMessage());
-                    return;
-                }
+            boolean isIdentityDocument = false;
 
-                for (EntityAnnotation annotation : res.getLabelAnnotationsList()) {
-                    annotation
-                        .getAllFields()
-                        .forEach((k, v) -> System.out.format("%s : %s%n", k, v.toString()));
+            if (labelResult.hasError()) {
+                System.out.format("Erro no label detection: %s%n", labelResult.getError().getMessage());
+            }
+
+            if (textResult.hasError()) {
+                System.out.format("Erro no text detection: %s%n", textResult.getError().getMessage());
+            }
+                           
+            TextAnnotation annotations = textResult.getFullTextAnnotation();
+            System.out.println(annotations.getText());
+
+            // Process label detection
+            for (EntityAnnotation annotation : labelResult.getLabelAnnotationsList()) {
+                String description = annotation.getDescription().toLowerCase();
+                System.out.format("Descrição detectada: %s (pontuação: %f)%n", description, annotation.getScore());
+
+                if (description.contains("identity document")) {
+                    isIdentityDocument = true;
+                    break;
                 }
             }
+
+            if (isIdentityDocument) {
+                System.out.println("Documento de identidade identificado na imagem.");
+                execution.setVariable("identity_document", true);
+            } else {
+                System.out.println("Documento não identificado como identidade.");
+                execution.setVariable("identity_document", false);
+            }
+            
+            execution.setVariable("data", annotations.getText());
+
+        } catch (IOException e) {
+            System.out.println("Erro ao processar a imagem: " + e.getMessage());
         }
     }
 }
