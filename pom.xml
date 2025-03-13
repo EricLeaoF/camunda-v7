@@ -31,6 +31,14 @@
         <scope>import</scope>
         <type>pom</type>
       </dependency>
+      
+      <dependency>
+        <groupId>com.google.cloud</groupId>
+        <artifactId>libraries-bom</artifactId>
+        <version>26.55.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -70,6 +78,11 @@
 	    <artifactId>mysql-connector-java</artifactId>
 	    <version>8.0.28</version>
 	</dependency>
+	
+	<dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-vision</artifactId>
+    </dependency>
 
   </dependencies>
 
